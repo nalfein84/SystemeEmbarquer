@@ -1,0 +1,83 @@
+#include <Servo.h>
+#include <SPI.h>
+#include <WiFi101.h>
+#include <BlynkSimpleWiFiShield101.h>
+
+#define BLYNK_PRINT Serial    // Comment this out to disable prints and save space
+
+  /* Moteur gauche */
+  
+  Servo motor_left;
+  int   pin_motor_left = 4;
+  
+  int min_range_forward_left = 0;
+  int max_range_forward_left = 90;
+
+  int min_range_rearward_left = 103;
+  int max_range_rearward_left = 180;
+
+  int angular_speed_left;
+
+  /* Moteur droit */
+
+  Servo motor_right;
+  int pin_motor_right = 5;
+
+  int min_range_forward_right = 0;
+  int max_range_forward_right = 89;
+
+  int min_range_rearward_right = 101;
+  int max_range_rearward_right = 180;
+
+  int angular_speed_right;
+
+  /* Capteur de lumière */
+
+  int pin_light_sensor = 6;
+  int min_light_intensity = 10;
+
+  /* Obstacle */
+  
+  int min_object_distance = 5;
+  int object_distance;
+
+  /* Connexion Blynk */
+
+  char auth[] = "e3a280891f414613a0ee367472633401";
+  char ssid[] = "Florent's Hotspot";
+  char pass[] = "FlorentGuyon";
+
+  bool  emergencyStop;
+   
+void setup() {
+  
+  Serial.begin(9600);
+  Blynk.begin(auth, ssid, pass);
+  motor_right.attach(pin_motor_right);
+  motor_left.attach(pin_motor_left);
+
+}
+
+BLYNK_WRITE(V1)
+{
+  emergencyStop = param.asInt();
+}
+
+/**
+ *  main
+ */
+void loop() {
+   
+  Blynk.run()
+  
+  if (!emergencyStop) {
+    
+    move_forward(100);
+    
+  } else { 
+    
+    move_stop();
+  }
+
+  delay(1000);
+}

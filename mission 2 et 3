@@ -1,0 +1,304 @@
+#define BLYNK_PRINT Serial    // Comment this out to disable prints and save space
+
+#include <SPI.h>
+#include <Servo.h>
+#include <WiFi101.h>
+#include <BlynkSimpleWiFiShield101.h>
+
+  /* Moteur gauche */
+  
+  Servo motor_left;
+  int   pin_motor_left = 4;
+  
+  int min_range_forward_left = 103;
+  int max_range_forward_left = 180;
+
+  int move_stop_left = 91;
+
+  int min_range_rearward_left = 90;
+  int max_range_rearward_left = 0;
+
+  int angular_speed_left;
+
+  /* Moteur droit */
+
+  Servo motor_right;
+  int pin_motor_right = 5;
+
+  int min_range_forward_right = 89;
+  int max_range_forward_right = 0;
+  int move_stop_right = 90;
+
+  int min_range_rearward_right = 101;
+  int max_range_rearward_right = 180;
+
+  int angular_speed_right;
+
+  /* Capteur de lumière */
+
+  int pin_light_sensor    = 6;
+  int min_light_intensity = 10;
+  int light_intensity;
+
+  /* Obstacle */
+  
+  int min_object_distance = 5;
+  int object_distance;
+
+  /* Connexion WIFI */
+
+  /*char auth[] = "e3a280891f414613a0ee367472633401";
+  char ssid[] = "Florent's Hotspot";
+  char pass[] = "FlorentGuyon";*/
+  char auth[] = "6af9a498dc154758b8312454bd92c3f6";
+  char ssid[] = "maximeb";
+  char pass[] = "maximebouis";
+
+  int emerencyStop = 0;
+
+  /* General */
+
+  String  move_mode     = "auto"; 
+  int     move_speed    = 100;
+  bool    ask_move_forward  = false;
+  bool    ask_move_right    = false;
+  bool    ask_move_left     = false;
+  bool    ask_move_rearward = false;
+
+void setup()
+{
+  Serial.begin(9600);
+  Blynk.begin(auth, ssid, pass);
+  motor_right.attach(pin_motor_right);
+  motor_left.attach(pin_motor_left);
+}
+
+/**
+ * Vitesse
+ * 0 - 100%
+ */
+BLYNK_WRITE(V0)
+{
+  move_speed = param.asInt();
+}
+
+/**
+ * Arrêt d'urgence
+ * 0  : OK
+ * 1  : STOP
+ */
+BLYNK_WRITE(V1)
+{
+  emerencyStop = param.asInt();
+}
+
+/**
+ * Manual : Gauche
+ * 0  : Rien
+ * 1  : Gauche
+ */
+BLYNK_WRITE(V2)
+{
+    int joystick_hor = param[0].asInt();
+    int joystick_ver = param[1].asInt();
+
+    ask_move_forward  = false;
+    ask_move_right    = false;
+    ask_move_left     = false; 
+    ask_move_rearward = false;
+
+    if (joystick_hor < 50) {
+
+       ask_move_left = true;
+       
+    } else if (joystick_hor > 973) {
+
+      ask_move_right = true;
+      
+    } else if (joystick_ver < 50) {
+
+       ask_move_rearward = true;
+       
+    } else if (joystick_ver > 973) {
+
+       ask_move_forward = true;
+       
+    } 
+}
+
+/**
+ * Mode
+ * 0  : Manuel
+ * 1  : Auto
+ * 2  : Essain
+ */
+BLYNK_WRITE(V4)
+{
+  int mode_code = param.asInt();
+  
+  switch (mode_code) {
+    
+    case 0 : move_mode = "manual";
+      break;
+      
+    case 1 : move_mode = "auto";
+      break;
+      
+    case 2 : move_mode = "essain";
+      break;
+  }
+}
+
+/*  Tourne vers la droite
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale
+ */
+void turn_right() {
+
+  angular_speed_right = min_range_forward_right - (min_range_forward_right * move_speed) / 100;
+  angular_speed_left = min_range_rearward_left - (min_range_rearward_left * move_speed) / 100;
+
+      Serial.println(angular_speed_right);
+    Serial.println(angular_speed_left);
+
+  motor_right.write(angular_speed_right);
+  motor_left.write(angular_speed_left);
+  
+}
+
+/*  Tourne vers la left
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale
+ */
+void turn_left() {
+
+  angular_speed_right = min_range_rearward_right + (max_range_rearward_right - min_range_rearward_right) * move_speed / 100;
+  angular_speed_left = min_range_forward_left + (max_range_forward_left - min_range_forward_left) * move_speed / 100;
+  
+    Serial.println(angular_speed_right);
+    Serial.println(angular_speed_left);
+
+  motor_right.write(angular_speed_right);
+  motor_left.write(angular_speed_left);
+  
+}
+
+/*  Avance vers l'avant
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale
+ */
+void move_forward() {
+  
+    angular_speed_right = min_range_forward_right - (min_range_forward_right * move_speed) / 100;
+    angular_speed_left = min_range_forward_left + (max_range_forward_left - min_range_forward_left) * move_speed / 100;
+
+    Serial.println(angular_speed_right);
+    Serial.println(angular_speed_left);
+   
+    motor_right.write(angular_speed_right);
+    motor_left.write(angular_speed_left);
+  
+}
+
+/*  Avance vers l'arrière
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale
+ */
+void move_rearward() {
+
+    angular_speed_right = min_range_rearward_right + (max_range_rearward_right - min_range_rearward_right) * move_speed / 100;
+    angular_speed_left = min_range_rearward_left - (min_range_rearward_left * move_speed) / 100;
+
+    Serial.println(angular_speed_right);
+    Serial.println(angular_speed_left);
+       
+    motor_right.write(angular_speed_right);
+    motor_left.write(angular_speed_left);
+  
+}
+
+void move_stop() {
+
+    angular_speed_right = move_stop_right;
+    angular_speed_left = move_stop_left;
+   
+    motor_right.write(angular_speed_right);
+    motor_left.write(angular_speed_left);
+}
+
+/**
+ *  Lecture du capteur de lumière
+ *  renvoi VRAI si l'intensité est égale ou au dessus du minimum autorisé, FAUX sinon
+ *  link : https://www.dfrobot.com/wiki/index.php/Analog_Grayscale_Sensor_V2_SKU:DFR0022
+ */
+bool test_light_sensor () {
+
+    light_intensity = analogRead(pin_light_sensor);
+    
+    return (light_intensity < min_light_intensity) ? true : false;
+}
+
+void action_manual () {
+
+    if (ask_move_right) {
+      
+        turn_right();
+      
+    } else if (ask_move_left) {
+
+        turn_left();
+        
+    } else if (ask_move_forward)  {
+
+        move_forward();
+      
+    } else if (ask_move_rearward)  {
+
+        move_rearward();
+      
+    } else {
+
+      move_stop();
+    }
+}
+
+void action_auto () {
+
+  move_forward();
+  
+}
+
+/*void action_essain () {
+
+  Serial.println("Mode essain");
+
+}*/
+
+void loop() {
+
+    //move_forward();
+  
+    Blynk.run();
+
+    if (!emerencyStop) {
+  
+        if (move_mode == "manual") {
+      
+            action_manual();
+
+        } else if (move_mode == "auto") {
+ 
+            action_auto();
+        
+        } else if (move_mode == "essain") {
+          
+            Serial.println("Mode essain");//action_essain();
+        }
+         
+    } else {
+  
+      Serial.println("Arret d'urgence !");
+      move_stop();
+      delay(1000);
+    }
+}

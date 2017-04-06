@@ -1,0 +1,557 @@
+#define BLYNK_PRINT Serial    // Comment this out to disable prints and save space
+
+#include <SPI.h>
+#include <Servo.h>
+#include <WiFi101.h>
+#include <Wire.h>
+#include <WiFiUdp.h>
+#include <Adafruit_BNO055.h>
+#include <Adafruit_Sensor.h>
+#include <BlynkSimpleWiFiShield101.h>
+
+  /* Moteur gauche */
+  
+  Servo motor_left;
+  int   pin_motor_left = 4;
+  
+  int min_range_forward_left = 103;
+  int max_range_forward_left = 110; //110
+
+  int move_stop_left = 91;
+
+  int min_range_rearward_left = 90;
+  int max_range_rearward_left = 70;
+
+  int angular_speed_left;
+
+  /* Moteur droit */
+
+  Servo motor_right;
+  int pin_motor_right = 5;
+
+  int min_range_forward_right = 89;
+  int max_range_forward_right = 0;
+  
+  int move_stop_right = 90;
+
+  int min_range_rearward_right = 101;
+  int max_range_rearward_right = 180;
+
+  int angular_speed_right;
+
+  /* Capteur de lumière */
+
+  int     pin_light_sensor    = A1;
+  int     min_light_intensity = 300;
+  int     light_intensity;
+  int     move_delay          = 0;
+  String  next_move           = "left";
+
+  /* Obstacle */
+
+  int pin_distance_sensor = A0;
+  int min_object_distance = 5;
+  int object_distance;
+
+  /* Connexion WIFI */
+
+  /*char auth[] = "e3a280891f414613a0ee367472633401";
+  char ssid[] = "Florent's Hotspot";
+  char pass[] = "FlorentGuyon";*/
+  
+  char auth[] = "6af9a498dc154758b8312454bd92c3f6";
+  char ssid[] = "maximeb";
+  char pass[] = "maximebouis";
+  
+  int emerencyStop = 0;
+  
+  /* Connexion Leader */
+
+  int status = WL_IDLE_STATUS;
+ 
+  char  ssidLeader[]    = "iPhone de Quentin";
+  char  passLeader[]    = "quinou84";
+  int   keyIndex        = 0;
+
+  unsigned int localPort = 2390; // On écoute sur ce port
+
+  char packetBuffer[255];
+  char ReplyBuffer[] = "Florent";
+
+  IPAddress ip(255,255,255,255);
+  IPAddress ipLeader;
+  bool isLeader = false;
+  
+  WiFiUDP Udp;
+
+  int len;
+  float coordonnees;
+
+  /* Gyroscope */
+
+  float   DegreRotation;
+ 
+  /* General */
+
+  String  move_mode         = "auto"; 
+  int     move_speed        = 100;
+  bool    ask_move_forward  = false;
+  bool    ask_move_right    = false;
+  bool    ask_move_left     = false;
+  bool    ask_move_rearward = false;
+
+
+   Adafruit_BNO055 bno = Adafruit_BNO055(55, BNO055_ADDRESS_B);
+   
+void setup()
+{
+  Serial.begin(9600);
+  Serial.println("Orientation Sensor Test"); Serial.println("");
+
+  if (!bno.begin()) {
+
+    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+    while(1);
+  }
+
+  delay(1000);
+
+  bno.setExtCrystalUse(true);
+
+  //Blynk.begin(auth, ssid, pass);
+  
+  motor_right.attach(pin_motor_right);
+  motor_left.attach(pin_motor_left);
+
+
+
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WiFi pas présent");
+    // On ne continue pas:
+    while (true);
+  }
+
+  while (status != WL_CONNECTED) {
+    
+    Serial.print("Attempting to connect to SSID: ");
+    Serial.println(ssidLeader);
+    
+    ipLeader = WiFi.localIP();
+    status = WiFi.begin(ssidLeader, passLeader);
+    
+    delay(10000);
+  }
+
+  Serial.println("Connected!");
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
+
+  // Affiché le l'adresse IP local:
+  IPAddress ip = WiFi.localIP();
+  Serial.print("Adresse IP: ");
+  Serial.println(ip);
+
+  Serial.println("\nConnexion au serveur...");
+  // Si connexion ok:
+  Udp.begin(localPort);
+  Udp.beginPacket(ip, localPort);
+  Udp.write("leader");
+  Udp.endPacket();
+
+  // Initialise le pin digital de la led comme un output:
+  pinMode(PIN_LED_13, OUTPUT);
+}
+
+/**
+ * Vitesse
+ * 0 - 100%
+ */
+BLYNK_WRITE(V0)
+{
+  move_speed = param.asInt();
+}
+
+/**
+ * Arrêt d'urgence
+ * 0  : OK
+ * 1  : STOP
+ */
+BLYNK_WRITE(V1)
+{
+  emerencyStop = param.asInt();
+}
+
+/**
+ * Manual : Gauche
+ * 0  : Rien
+ * 1  : Gauche
+ */
+BLYNK_WRITE(V2)
+{
+    int joystick_hor = param[0].asInt();
+    int joystick_ver = param[1].asInt();
+
+    ask_move_forward  = false;
+    ask_move_right    = false;
+    ask_move_left     = false; 
+    ask_move_rearward = false;
+
+    if (joystick_hor < 50) {
+
+       ask_move_left = true;
+       
+    } else if (joystick_hor > 973) {
+
+      ask_move_right = true;
+      
+    } else if (joystick_ver < 50) {
+
+       ask_move_rearward = true;
+       
+    } else if (joystick_ver > 973) {
+
+       ask_move_forward = true;
+       
+    } 
+}
+
+/**
+ * Mode
+ * 0  : Manuel
+ * 1  : Auto
+ * 2  : Essain
+ */
+BLYNK_WRITE(V4)
+{
+  int mode_code = param.asInt();
+  
+  switch (mode_code) {
+    
+    case 0 : move_mode = "manual";
+      break;
+      
+    case 1 : move_mode = "auto";
+      break;
+      
+    case 2 : move_mode = "essain";
+      break;
+  }
+}
+
+/*  Tourne vers la droite
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale
+ */
+void turn_right() {
+
+  angular_speed_right = min_range_forward_right - (min_range_forward_right * move_speed) / 100;
+  angular_speed_left = min_range_rearward_left - (min_range_rearward_left * move_speed) / 100;
+
+      /*Serial.println(angular_speed_right);
+    Serial.println(angular_speed_left);*/
+
+  motor_right.write(angular_speed_right);
+  motor_left.write(angular_speed_left);
+  
+}
+
+/*  Tourne vers la left
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale
+ */
+void turn_left() {
+
+  angular_speed_right = min_range_rearward_right + (max_range_rearward_right - min_range_rearward_right) * move_speed / 100;
+  angular_speed_left = min_range_forward_left + (max_range_forward_left - min_range_forward_left) * move_speed / 100;
+  
+    /*Serial.println(angular_speed_right);
+    Serial.println(angular_speed_left);*/
+
+  motor_right.write(angular_speed_right);
+  motor_left.write(angular_speed_left);
+  
+}
+
+/*  Avance vers l'avant
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale
+ */
+void move_forward() {
+  
+    angular_speed_right = min_range_forward_right - (min_range_forward_right * move_speed) / 100;
+    angular_speed_left = min_range_forward_left + (max_range_forward_left - min_range_forward_left) * move_speed / 100;
+
+    /*Serial.println(angular_speed_right);
+    Serial.println(angular_speed_left);*/
+   
+    motor_right.write(angular_speed_right);
+    motor_left.write(angular_speed_left);
+  
+}
+
+/*  Avance vers l'arrière
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale
+ */
+void move_rearward() {
+
+    angular_speed_right = min_range_rearward_right + (max_range_rearward_right - min_range_rearward_right) * move_speed / 100;
+    angular_speed_left = min_range_rearward_left - (min_range_rearward_left * move_speed) / 100;
+
+    /*Serial.println(angular_speed_right);
+    Serial.println(angular_speed_left);*/
+       
+    motor_right.write(angular_speed_right);
+    motor_left.write(angular_speed_left);
+  
+}
+
+void move_stop() {
+
+    angular_speed_right = move_stop_right;
+    angular_speed_left = move_stop_left;
+   
+    motor_right.write(angular_speed_right);
+    motor_left.write(angular_speed_left);
+}
+
+/**
+ *  Lecture du capteur de lumière
+ *  renvoi VRAI si l'intensité est égale ou au dessus du minimum autorisé, FAUX sinon
+ *  link : https://www.dfrobot.com/wiki/index.php/Analog_Grayscale_Sensor_V2_SKU:DFR0022
+ */
+bool test_light_sensor () {
+
+    light_intensity = analogRead(pin_light_sensor);
+    
+    return (light_intensity > min_light_intensity) ? false : true;
+}
+
+void action_manual () {
+
+    if (ask_move_right) {
+      
+        turn_right();
+      
+    } else if (ask_move_left) {
+
+        turn_left();
+        
+    } else if (ask_move_forward)  {
+
+        move_forward();
+      
+    } else if (ask_move_rearward)  {
+
+        move_rearward();
+      
+    } else {
+
+      move_stop();
+    }
+}
+
+void change_next_move () {
+
+    next_move = (next_move == "right") ? "left" : "right";
+      
+}
+
+void increase_move_delay () {
+    move_delay = move_delay + 25;
+
+    if (move_delay >= 1000) {
+
+        emerencyStop = true; 
+    }  
+}
+
+void action_auto () {
+    
+    if (test_light_sensor()) {
+  
+        move_forward();
+        move_delay = 0;
+        
+    } else {
+
+        increase_move_delay();
+        change_next_move();
+          
+        if (next_move == "right") {
+        
+            turn_right();
+            
+        } else {
+          
+            turn_left();
+        }
+          
+        delay(move_delay);   
+    }   
+}
+
+/*void action_essain () {
+
+  int packetSize = Udp.parsePacket();
+  
+  if (packetSize)  {
+    
+    Serial.print("Reception d'un packet de taille: ");
+    Serial.println(packetSize);
+    Serial.print("Depuis: ");
+    IPAddress remoteIp = Udp.remoteIP();
+    Serial.print(remoteIp);
+    Serial.print(", port: ");
+    Serial.println(Udp.remotePort());
+
+    // Lit le packet du buffer:
+    int len = Udp.read(packetBuffer, 255);
+    if (len > 0) packetBuffer[len] = 0;
+    
+    Serial.println("Données:");
+    Serial.println(packetBuffer);
+    
+    String data = packetBuffer;
+    
+    if (data == "leader") {
+      
+      ipLeader = Udp.remoteIP();
+      isLeader = false;
+      Serial.println("Nouveau leader d'ip:");
+      Serial.println(ipLeader);
+    }
+
+    if (isLeader) {
+      
+      digitalWrite(LED_BUILTIN, LOW);
+      
+    } else {
+      
+      digitalWrite(LED_BUILTIN, LOW);
+      delay(1000);
+      digitalWrite(LED_BUILTIN, HIGH);
+      delay(1000);
+    }
+
+    // Envoi une réponse à l'adresse IP et au port données par le packet reçu:
+    Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
+    Udp.write(ReplyBuffer);
+    Udp.endPacket();
+  }
+}*/
+
+void test_object_presence () {
+
+    object_distance = analogRead(pin_distance_sensor);
+
+    if (object_distance > min_object_distance) {
+  
+        turn_left();
+        delay(500);
+    }
+}
+
+
+void receive_message() {
+
+    // Envoi une réponse à l'adresse IP et au port données par le packet reçu:
+    /*Udp.beginPacket("255.255.255.255", 2390);
+    Udp.write(ReplyBuffer);
+    Udp.endPacket();*/
+
+  int packetSize = Udp.parsePacket();
+  delay(1000);
+  
+  if (packetSize)  {
+    
+    //Serial.print("Reception d'un packet de taille: ");
+    //Serial.println(packetSize);
+    Serial.print("Depuis: ");
+    
+    IPAddress remoteIp = Udp.remoteIP();
+    
+    Serial.print(remoteIp);
+    Serial.print(", port: ");
+    Serial.print(Udp.remotePort());
+
+    // Lit le packet du buffer:
+    len = Udp.read(packetBuffer, 255);
+    if (len > 0) packetBuffer[len] = 0;
+    
+    Serial.print(", data: ");
+    Serial.println(packetBuffer);
+    
+    String data = packetBuffer;
+    
+    if (data == "leader") {
+      
+      ipLeader = Udp.remoteIP();
+      isLeader = false;
+      Serial.println("Nouveau leader d'ip:");
+      Serial.println(ipLeader);
+    }
+
+    if (isLeader) {
+      
+      digitalWrite(LED_BUILTIN, LOW);
+      
+    } else {
+      
+      digitalWrite(LED_BUILTIN, LOW);
+      delay(1000);
+      digitalWrite(LED_BUILTIN, HIGH);
+      delay(1000);
+    }
+
+    // Envoi une réponse à l'adresse IP et au port données par le packet reçu:
+    Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
+    Udp.write(ReplyBuffer);
+    Udp.endPacket();
+  }
+}
+
+void alignement() {
+
+    int pos = atoi(packetBuffer);
+    float realPos = pos;
+    realPos /= 100;
+    
+    Serial.println(pos);
+    Serial.println(realPos);
+    
+    alignement_leader();
+}
+
+void alignement_leader() {
+
+    imu::Vector<3> test = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
+    
+    if(atan2(test[0], test[1]) < DegreRotation-0.07 || atan2(test[0], test[1]) > DegreRotation+0.07){ 
+       
+      turn_right();
+      
+    } else {
+      
+      move_stop();
+      
+    }
+}
+
+void loop() {
+
+    receive_message();
+
+    if (isLeader) {
+
+        Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
+        Udp.write(DegreRotation);
+        Udp.endPacket();
+      
+    } else {
+
+        alignement_leader();
+      
+    }
+   
+} 

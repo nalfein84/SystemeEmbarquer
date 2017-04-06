@@ -1,0 +1,125 @@
+#include <Servo.h>
+
+  /* Moteur droit 90 101 */
+
+  Servo motor_right;
+  int   pin_motor_right = 5;
+
+  int max_range_right = 0;
+  int min_range_right = 180;
+
+  int angular_speed_right;
+  
+
+  /* Moteur gauche 91 102 */
+  
+  Servo motor_left;
+  int   pin_motor_left = 4;
+  
+  int max_range_left = 0;
+  int min_range_left = 180;
+
+  int angular_speed_left;
+
+  /**/
+  
+  int distance_object;
+   
+void setup() {
+  
+  Serial.begin(9600);
+  motor_right.attach(pin_motor_right);
+  motor_left.attach(pin_motor_left);
+
+}
+
+/**
+ *  main
+ */
+void loop() {
+
+  Serial.write("Start");
+
+  motor_right.write(90);
+
+  /*
+   * Test des fonctions
+   
+  Serial.println("Move forward");
+  move_forward(100);
+  delay(5000);*/
+
+  /*Serial.println("Move rearward");
+  move_rearward(100);
+  delay(5000);
+
+  Serial.println("Turn left");
+  turn_left(100);
+  delay(5000);
+
+  Serial.println("Turn left");
+  turn_right(100);
+  delay(5000);*/
+
+  /**
+   * TO DO 
+   * 
+   * Avancer tout droit jusqu'à détection 
+   * tourner à gauche
+   */
+
+}
+
+/*  Tourne vers la droite
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale vers l'avant
+ */
+void turn_left(int speed) {
+
+  angular_speed_right = (speed * max_speed_forward) / 100;
+  angular_speed_left = (speed * max_speed_rearward) / 100;
+
+  motor_right.write(angular_speed_right);
+  motor_left.write(angular_speed_left);
+  
+}
+
+/*  Tourne vers la droite
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale vers l'avant
+ */
+void turn_right(int speed) {
+
+  angular_speed_right = (speed * max_speed_rearward) / 100;
+  angular_speed_left = (speed * max_speed_forward) / 100;
+
+  motor_right.write(angular_speed_right);
+  motor_left.write(angular_speed_left);
+  
+}
+
+/*  Avance vers l'avant
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale vers l'avant
+ */
+void move_forward(int speed) {
+
+    angular_speed = (speed * max_speed_forward) / 100;
+   
+    motor_right.write(angular_speed);
+    motor_left.write(angular_speed);
+  
+}
+
+/*  Avance vers l'arrière
+ *  speed : entier de 0 à 100
+ *  100  -> 100% de sa vitesse maximale vers l'arrière
+ */
+void move_rearward(int speed) {
+   
+    angular_speed = (speed * max_speed_rearward) / 100;
+   
+    motor_right.write(angular_speed);
+    motor_left.write(angular_speed);
+  
+}
